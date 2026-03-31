@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Camera</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap');
+
+  :root {
+    --white: #ffffff;
+    --off: #f5f4f2;
+    --border: #d8d4ce;
+    --mid: #a09a93;
+    --dark: #2a2622;
+    --accent: #c0392b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--white);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'DM Mono', monospace;
+    color: var(--dark);
+    padding: 32px 20px;
+  }
+
+  .app {
+    width: 100%;
+    max-width: 480px;
+  }
+
+  /* Viewfinder */
+  .viewfinder {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 4/3;
+    background: #000;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-bottom: none;
+  }
+
+  #video {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .vignette {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.45) 100%);
+    pointer-events: none;
+  }
+
+  .crosshair {
+    position: absolute; inset: 0;
+    pointer-events: none;
+  }
+  .crosshair::before {
+    content: '';
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 18px; height: 18px;
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: 50%;
+  }
+
+  .no-cam {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 6px; color: var(--mid);
+    font-size: 0.65rem; letter-spacing: 0.14em; text-transform: uppercase;
+  }
+
+  /* Panel */
+  .panel {
+    border: 1px solid var(--border);
+    border-bottom: none;
+    background: var(--white);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Style chips */
+  .chips {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+  }
+
+  .chip {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 4px 9px;
+    border: 1px solid var(--border);
+    background: var(--white);
+    color: var(--mid);
+    cursor: pointer;
+    border-radius: 2px;
+    transition: all 0.12s;
+  }
+
+  .chip:hover { border-color: var(--dark); color: var(--dark); }
+  .chip.active { background: var(--dark); border-color: var(--dark); color: var(--white); }
+
+  /* Action row */
+  .action-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .shot-info {
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--mid);
+    line-height: 1.7;
+  }
+  .shot-info strong {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 300;
+    color: var(--dark);
+    letter-spacing: 0;
+    line-height: 1;
+  }
+
+  #shutter-btn {
+    width: 52px; height: 52px;
+    border-radius: 50%;
+    border: 1px solid var(--dark);
+    background: var(--white);
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+  }
+  #shutter-btn::after {
+    content: '';
+    position: absolute;
+    inset: 8px;
+    border-radius: 50%;
+    background: var(--dark);
+    transition: inset 0.08s, background 0.08s;
+  }
+  #shutter-btn:hover::after { inset: 6px; }
+  #shutter-btn:active::after { inset: 10px; background: var(--accent); }
+  #shutter-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+  #shutter-btn:disabled::after { inset: 8px; }
+
+  .res-label {
+    font-size: 0.6rem;
+    color: var(--mid);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-align: right;
+    line-height: 1.7;
+  }
+
+  /* Roll section */
+  .roll-section {
+    border: 1px solid var(--border);
+    background: var(--off);
+    padding: 11px 16px 14px;
+  }
+
+  .roll-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .roll-header span {
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--mid);
+  }
+
+  #clear-btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    background: none; border: none;
+    color: var(--mid); cursor: pointer;
+    padding: 0;
+    transition: color 0.12s;
+  }
+  #clear-btn:hover { color: var(--accent); }
+
+  .film-strip {
+    display: flex;
+    gap: 7px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .film-strip::-webkit-scrollbar { display: none; }
+
+  .frame {
+    flex-shrink: 0;
+    width: 76px;
+    aspect-ratio: 4/3;
+    border: 1px solid var(--border);
+    overflow: hidden;
+    cursor: pointer;
+    position: relative;
+    background: #000;
+    transition: border-color 0.12s;
+  }
+  .frame:hover { border-color: var(--dark); }
+  .frame img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity 0.12s; }
+  .frame:hover img { opacity: 0.65; }
+  .frame .dl {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.55rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--white); opacity: 0; transition: opacity 0.12s;
+  }
+  .frame:hover .dl { opacity: 1; }
+  .frame .num {
+    position: absolute; bottom: 3px; left: 4px;
+    font-size: 0.48rem; color: rgba(255,255,255,0.45); letter-spacing: 0.08em;
+  }
+
+  .empty {
+    font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase;
+    color: var(--border); padding: 14px 0; width: 100%; text-align: center;
+  }
+
+  /* Flash */
+  #flash { position: fixed; inset: 0; background: white; opacity: 0; pointer-events: none; z-index: 9999; }
+
+  canvas { display: none; }
+</style>
+</head>
+<body>
+
+<div id="flash"></div>
+<canvas id="canvas"></canvas>
+
+<div class="app">
+
+  <div class="viewfinder">
+    <video id="video" autoplay playsinline muted></video>
+    <div class="vignette"></div>
+    <div class="crosshair"></div>
+    <div class="no-cam" id="no-cam" style="display:none">
+      <span>○</span><span>allow camera access</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="chips" id="chips">
+      <button class="chip active" data-style="disposable">Disposable</button>
+      <button class="chip" data-style="noir">Noir</button>
+      <button class="chip" data-style="lomo">Lomo</button>
+      <button class="chip" data-style="polaroid">Polaroid</button>
+      <button class="chip" data-style="vhs">VHS</button>
+    </div>
+
+    <div class="action-row">
+      <div class="shot-info">
+        <strong id="shot-count">00</strong>
+        exposures
+      </div>
+      <button id="shutter-btn" title="Shoot (Space)"></button>
+      <div class="res-label">160 × 120<br>lo‑fi</div>
+    </div>
+  </div>
+
+  <div class="roll-section">
+    <div class="roll-header">
+      <span>Roll</span>
+      <button id="clear-btn">Clear</button>
+    </div>
+    <div class="film-strip" id="film-strip">
+      <div class="empty" id="empty-msg">no exposures yet</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const video       = document.getElementById('video');
+const canvas      = document.getElementById('canvas');
+const ctx         = canvas.getContext('2d');
+const shutterBtn  = document.getElementById('shutter-btn');
+const filmStrip   = document.getElementById('film-strip');
+const shotCountEl = document.getElementById('shot-count');
+const clearBtn    = document.getElementById('clear-btn');
+const noCam       = document.getElementById('no-cam');
+const flashEl     = document.getElementById('flash');
+const chips       = document.querySelectorAll('.chip');
+
+let shots = 0;
+let activeStyle = 'disposable';
+let cameraReady = false;
+const W = 160, H = 120;
+
+async function startCamera() {
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    video.srcObject = s;
+    noCam.style.display = 'none';
+    cameraReady = true;
+  } catch { noCam.style.display = 'flex'; }
+}
+startCamera();
+
+chips.forEach(chip => {
+  chip.addEventListener('click', () => {
+    chips.forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    activeStyle = chip.dataset.style;
+  });
+});
+
+function doFlash() {
+  flashEl.style.transition = 'none';
+  flashEl.style.opacity = '1';
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    flashEl.style.transition = 'opacity 0.45s ease';
+    flashEl.style.opacity = '0';
+  }));
+}
+
+function applyFilter(style) {
+  const id = ctx.getImageData(0, 0, W, H);
+  const d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    let r = d[i], g = d[i+1], b = d[i+2];
+    const row = Math.floor(i / 4 / W);
+
+    if (style === 'disposable') {
+      // Warm, faded, lifted blacks
+      r = r * 0.88 + 28;
+      g = g * 0.84 + 18;
+      b = b * 0.68 + 14;
+
+    } else if (style === 'noir') {
+      // High-contrast black & white
+      const lum = 0.299*r + 0.587*g + 0.114*b;
+      const c = Math.max(0, Math.min(255, (lum - 128) * 1.4 + 128));
+      r = g = b = c;
+
+    } else if (style === 'lomo') {
+      // Punchy cross-processed: push saturation hard, crush blacks
+      r = Math.max(0, Math.min(255, (r - 128) * 1.6 + 128 + 15));
+      g = Math.max(0, Math.min(255, (g - 128) * 1.1 + 128 - 10));
+      b = Math.max(0, Math.min(255, (b - 128) * 1.7 + 128 + 20));
+
+    } else if (style === 'polaroid') {
+      // Pale, cool, washed-out
+      r = r * 0.70 + 60;
+      g = g * 0.72 + 58;
+      b = b * 0.78 + 72;
+
+    } else if (style === 'vhs') {
+      // Scanlines + magenta bleed, desaturated
+      if (row % 3 === 0) { r *= 0.45; g *= 0.45; b *= 0.45; }
+      const avg = (r + g + b) / 3;
+      r = Math.min(255, avg * 0.4 + r * 0.6 + 30);
+      g = Math.min(255, avg * 0.4 + g * 0.6 - 5);
+      b = Math.min(255, avg * 0.4 + b * 0.6 + 18);
+    }
+
+    const grainAmt = style === 'vhs' ? 45 : 28;
+    const grain = (Math.random() - 0.5) * grainAmt;
+    d[i]   = Math.max(0, Math.min(255, r + grain));
+    d[i+1] = Math.max(0, Math.min(255, g + grain));
+    d[i+2] = Math.max(0, Math.min(255, b + grain));
+  }
+  ctx.putImageData(id, 0, 0);
+}
+
+function addVignette() {
+  const g = ctx.createRadialGradient(W/2,H/2,H*0.15,W/2,H/2,H*0.72);
+  g.addColorStop(0,'rgba(0,0,0,0)');
+  g.addColorStop(1,'rgba(0,0,0,0.6)');
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+}
+
+function shoot() {
+  if (!cameraReady) { startCamera(); return; }
+  shutterBtn.disabled = true;
+  doFlash();
+
+  const style = activeStyle;
+  canvas.width = W; canvas.height = H;
+  ctx.drawImage(video, 0, 0, W, H);
+  applyFilter(style);
+  addVignette();
+
+  let dataUrl;
+  if (style === 'polaroid') {
+    const p = document.createElement('canvas');
+    p.width = W + 10; p.height = H + 26;
+    const pc = p.getContext('2d');
+    pc.fillStyle = '#f4f1ec';
+    pc.fillRect(0, 0, p.width, p.height);
+    pc.drawImage(canvas, 5, 5, W, H);
+    dataUrl = p.toDataURL('image/png');
+  } else {
+    dataUrl = canvas.toDataURL('image/png');
+  }
+
+  addFrame(dataUrl, style);
+  setTimeout(() => { shutterBtn.disabled = false; }, 350);
+}
+
+function addFrame(dataUrl, style) {
+  shots++;
+  shotCountEl.textContent = String(shots).padStart(2, '0');
+  document.getElementById('empty-msg')?.remove();
+
+  const frame = document.createElement('div');
+  frame.className = 'frame';
+  const n = shots;
+  frame.innerHTML = `
+    <img src="${dataUrl}" alt="">
+    <div class="dl">save</div>
+    <div class="num">${String(n).padStart(2,'0')}</div>
+  `;
+  frame.addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = dataUrl;
+    a.download = `shot-${String(n).padStart(3,'0')}-${style}.png`;
+    a.click();
+  });
+  filmStrip.appendChild(frame);
+  filmStrip.scrollLeft = filmStrip.scrollWidth;
+}
+
+shutterBtn.addEventListener('click', shoot);
+clearBtn.addEventListener('click', () => {
+  shots = 0;
+  shotCountEl.textContent = '00';
+  filmStrip.innerHTML = '<div class="empty" id="empty-msg">no exposures yet</div>';
+});
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !shutterBtn.disabled) { e.preventDefault(); shoot(); }
+});
+</script>
+</body>
+</html>
